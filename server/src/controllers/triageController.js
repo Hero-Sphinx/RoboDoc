@@ -5,55 +5,76 @@ const prisma = new PrismaClient();
 
 async function createTriageRecord(req, res) {
   try {
-    const { patient, symptoms, urgency } = req.body;
+    
+    const { 
+      patient, 
+      age, 
+      gender, 
+      heartRate, 
+      bloodPressure, 
+      temperature, 
+      symptoms, 
+      medications, 
+      history, 
+      urgency 
+    } = req.body;
     
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-        console.error("❌ ERROR: GEMINI_API_KEY is missing from .env");
-        return res.status(500).json({ error: "Server configuration error: Missing API Key" });
+        console.error("❌ ERROR: GEMINI_API_KEY is missing");
+        return res.status(500).json({ error: "Missing API Key" });
     }
 
-    // 1. Initialize with the NEWEST SDK structure
-    // We are passing 'v1' to ensure it avoids the broken v1beta endpoint
     const genAI = new GoogleGenerativeAI(apiKey);
-    
-    // 2. Use the most recent stable model ID
-    // Note: As of mid-2026, 'gemini-2.5-flash' is the standard stable model
     const model = genAI.getGenerativeModel(
         { model: "gemini-2.5-flash" }, 
-        { apiVersion: 'v1' } // THIS IS THE CRITICAL FIX
+        { apiVersion: 'v1' } 
     );
 
     const language = containsFrenchKeywords(symptoms) ? 'French' : 'English';
 
-    const prompt = `As a medical triage assistant, analyze these symptoms: ${symptoms}. Provide a possible diagnosis, suggest general over-the-counter care, and most importantly, conclude with a clear directive: STAY HOME or GO TO THE HOSPITAL. Make sure to consider the urgency level: ${urgency}. Respond in ${language}. Include the urgency level in your response. Use authentic medical logic.`;
+    // 2. Updated Prompt (oxygenLevel REMOVED from the AI instructions)
+    const prompt = `
+      As a medical triage assistant, analyze this profile:
+      - Patient: ${patient} (Age: ${age}, Gender: ${gender})
+      - Vitals: Heart Rate ${heartRate} bpm, BP ${bloodPressure}, Temp ${temperature}°C
+      - Symptoms: ${symptoms}
+      - Meds/History: ${medications || "None"} / ${history || "None"}
+      
+      Provide a diagnosis and a FINAL DIRECTIVE: "STAY HOME" or "GO TO THE HOSPITAL". 
+      Respond in ${language}.
+    `;
 
-    console.log(`🤖 Sending request to Gemini for ${patient}...`);
+    console.log(`🤖 AI is analyzing vitals for ${patient}...`);
 
-    // 3. AI Generation
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const diagnosis = response.text();
 
-    // 4. Save to MySQL
+    // 3. Save to MySQL (oxygenLevel REMOVED from the data object)
     const newTriageRecord = await prisma.triageRecord.create({
       data: {
-        patient: patient || "Unknown Patient", // Fallback in case patient name is missing
+        patient: patient || "Unknown Patient",
+        age: age ? parseInt(age) : null,
+        gender: gender || null,
+        heartRate: heartRate ? parseInt(heartRate) : null,
+        bloodPressure: bloodPressure || null,
+        temperature: temperature ? parseFloat(temperature) : null,
         symptoms,
-        urgency,
+        medications: medications || null,
+        history: history || null,
+        urgency: urgency || "normal",
         language,
         diagnosis,
-        createdAt: new Date(),
       },
     });
 
-    console.log(`✅ Triage successfully processed for ${patient}`);
+    console.log(`✅ Success! Record #${newTriageRecord.id} saved for ${patient}`);
     res.status(201).json(newTriageRecord);
 
   } catch (error) {
     console.error("--- TRIAGE ERROR REPORT ---");
-    console.error("Status:", error.status);
-    console.error("Message:", error.message);
+    console.error("Message:", error.message); // This is where "oxygenLevel is not defined" came from
     
     res.status(500).json({ 
         error: 'An error occurred during diagnosis',
@@ -63,8 +84,8 @@ async function createTriageRecord(req, res) {
 }
 
 function containsFrenchKeywords(symptoms) {
-  const frenchKeywords = ['fièvre', 'douleur', 'tête', 'mal', 'aide', 'hopital'];
-  return frenchKeywords.some(keyword => symptoms.toLowerCase().includes(keyword));
+  const keywords = ['fièvre', 'douleur', 'tête', 'mal', 'aide', 'hopital'];
+  return keywords.some(k => symptoms?.toLowerCase().includes(k));
 }
 
 module.exports = { createTriageRecord };

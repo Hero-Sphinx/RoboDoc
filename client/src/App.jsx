@@ -1,121 +1,186 @@
-import { useState } from 'react'
+import { useState } from 'react' // Added this back in
+import DashboardLayout from "@/components/layout/DashboardLayout"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { useToast } from "@/components/ui/use-toast"
+import { Toaster } from "@/components/ui/toaster"
+import { Badge } from "@/components/ui/badge"
 
 function App() {
-  const [patientName, setPatientName] = useState('');
-  const [symptoms, setSymptoms] = useState('');
-  const [urgency, setUrgency] = useState('normal');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
+  const { toast } = useToast()
+
+  const [formData, setFormData] = useState({
+    patient: '',
+    age: '',
+    gender: 'Other',
+    heartRate: '',
+    bloodPressure: '',
+    temperature: '',
+    symptoms: '',
+    medications: '',
+    history: '',
+    urgency: 'normal'
+  })
+
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState(null)
+
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }
 
   const handleTriage = async () => {
-    if (!symptoms) return alert("Please enter symptoms");
-    setLoading(true);
-    setResult(null); // Clear previous result so the user sees it's working
-    
+    if (!formData.symptoms || !formData.patient) {
+      return toast({
+        variant: "destructive",
+        title: "Incomplete Form",
+        description: "Please provide at least a name and symptoms.",
+      })
+    }
+
+    setLoading(true)
+    setResult(null)
+
     try {
       const response = await fetch('http://localhost:5000/api/triage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          patient: patientName,  
-          symptoms, 
-          urgency 
-        }),
-      });
-      
-      const data = await response.json();
-      console.log("Backend Response:", data);
+        body: JSON.stringify(formData),
+      })
 
-      // We check for 'analysis' OR 'diagnosis' based on what your backend sends
-      const aiResponse = data.analysis || data.diagnosis || (data.data && data.data.diagnosis);
-      
-      setResult(aiResponse); 
+      const data = await response.json()
+      setResult(data.diagnosis || "AI failed to generate a response.")
+
+      toast({
+        title: "Assessment Saved",
+        description: `Successfully stored record for ${formData.patient} in MySQL.`,
+      })
     } catch (error) {
-      console.error("Error:", error);
-      setResult("Error connecting to server. Is the backend running?");
+      toast({
+        variant: "destructive",
+        title: "Network Error",
+        description: "The backend server is not responding.",
+      })
+    } finally {
+      setLoading(false)
     }
-    setLoading(false);
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 py-12 px-4">
-      <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        
-        {/* Header */}
-        <div className="bg-blue-700 p-6 text-white">
-          <h1 className="text-2xl font-bold">AI Triage Portal</h1>
-          <p className="text-blue-100 text-sm">Built with Heart • Hustle • Passion • Purpose</p>
-        </div>
-
-        <div className="p-8 space-y-6">
-          {/* Patient Info Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Patient Name</label>
-              <input 
-                type="text" 
-                value={patientName}
-                onChange={(e) => setPatientName(e.target.value)}
-                className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                placeholder="Enter patient name..."
-              />
+    <DashboardLayout>
+      <div className="max-w-4xl mx-auto p-8 space-y-8 pb-20">
+        <Card className="border-t-4 border-primary shadow-lg bg-white">
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle className="text-2xl font-bold">New Triage Entry</CardTitle>
+                <CardDescription>Input clinical data for priority analysis.</CardDescription>
+              </div>
+              <Badge variant={loading ? "outline" : "secondary"}>
+                {loading ? "AI Processing..." : "System Ready"}
+              </Badge>
             </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Initial Urgency (Self-Reported)</label>
-              <select 
-                value={urgency}
-                onChange={(e) => setUrgency(e.target.value)}
-                className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-              >
-                <option value="normal">Normal / Routine</option>
-                <option value="urgent">Urgent</option>
-                <option value="emergency">Emergency</option>
-              </select>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            {/* Row 1: Demographics */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold">Patient Name</label>
+                <Input value={formData.patient} onChange={(e) => handleChange('patient', e.target.value)} placeholder="Full Name" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold">Age</label>
+                <Input type="number" value={formData.age} onChange={(e) => handleChange('age', e.target.value)} placeholder="Years" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold">Gender</label>
+                <Select value={formData.gender} onValueChange={(v) => handleChange('gender', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
 
-          {/* Symptoms Box */}
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Symptoms & Notes</label>
-            <textarea 
-              rows="4"
-              value={symptoms}
-              onChange={(e) => setSymptoms(e.target.value)}
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-              placeholder="Describe symptoms in detail (e.g., chest pain, duration, severity)..."
-            ></textarea>
-          </div>
+            {/* Row 2: Vitals */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-red-600">Heart Rate (BPM)</label>
+                <Input value={formData.heartRate} onChange={(e) => handleChange('heartRate', e.target.value)} placeholder="e.g. 75" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-blue-600">Blood Pressure</label>
+                <Input value={formData.bloodPressure} onChange={(e) => handleChange('bloodPressure', e.target.value)} placeholder="120/80" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-orange-600">Temp (°C)</label>
+                <Input type="number" step="0.1" value={formData.temperature} onChange={(e) => handleChange('temperature', e.target.value)} placeholder="36.6" />
+              </div>
+            </div>
 
-          {/* Action Button */}
-          <button 
-            onClick={handleTriage}
-            disabled={loading}
-            className={`w-full py-4 rounded-xl font-bold text-lg transition shadow-lg ${
-              loading ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
-          >
-            {loading ? 'Analyzing Symptoms...' : 'Run AI Triage Assessment'} 
-          </button>
+            {/* Row 3: Notes */}
+            <div className="space-y-4 pt-4 border-t">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold">Medical History</label>
+                  <Textarea value={formData.history} onChange={(e) => handleChange('history', e.target.value)} placeholder="Relevant history..." className="h-24" />
+                </div>
 
-          {/* Result Area */}
-          {/* Result Area */}
-{result && (
-  <div className="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-xl">
-    <h3 className="text-blue-800 font-bold mb-2 uppercase text-xs tracking-wider">AI Assessment Result:</h3>
-    {/* 'whitespace-pre-wrap' preserves the spacing from Gemini */}
-    <div className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-      {result}
-    </div>
-  </div>
-)}
-        </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-purple-600">Current Medications</label>
+                  <Textarea
+                    value={formData.medications}
+                    onChange={(e) => handleChange('medications', e.target.value)}
+                    placeholder="List current meds & dosage..."
+                    className="h-24 border-purple-100 focus:border-purple-300"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold">Current Symptoms</label>
+                  <Textarea value={formData.symptoms} onChange={(e) => handleChange('symptoms', e.target.value)} placeholder="Patient complaints..." className="h-24" />
+                </div>
+              </div>
+            </div>
+
+            <Button onClick={handleTriage} disabled={loading} className="w-full h-14 text-xl font-bold shadow-md">
+              {loading ? "Generating Medical Report..." : "Submit to AI Portal"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* AI Result View */}
+        {result && (
+          <Card className="bg-blue-50 border-blue-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-blue-800 text-sm font-black uppercase tracking-widest">
+                AI Clinical Assessment
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-white p-6 rounded-lg border shadow-sm text-slate-800 whitespace-pre-wrap text-lg leading-relaxed font-medium">
+                {result}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
-      
-      <footer className="text-center mt-8 text-slate-400 text-xs uppercase tracking-widest">
-        Built by Salami | AI Triage Backend v1.0
-      </footer>
-    </div>
-  );
+      <Toaster />
+    </DashboardLayout>
+  )
 }
 
-export default App;
+export default App

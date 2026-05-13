@@ -1,0 +1,15 @@
+# Ignore dependency folders
+node_modules/
+
+# Ignore environment variables (keeps my API keys safe!)
+.env
+
+# Ignore build outputs
+dist/
+build/
+
+# Ignore Prisma generated client
+server/src/generated/prisma/
+
+# Ignore system files
+.DS_Store

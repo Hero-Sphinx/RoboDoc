@@ -1,12 +1,15 @@
 const { PrismaClient } = require('@prisma/client');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const twilio = require('twilio'); // 1. Added Twilio Import
+const twilio = require('twilio');
 
 const prisma = new PrismaClient();
 
-// 2. Initialize Twilio Client
+// Initialize Twilio Client
 const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 
+/**
+ * Submit a new triage assessment (Staff/Doctor side)
+ */
 async function createTriageRecord(req, res) {
   try {
     const {
@@ -33,7 +36,7 @@ async function createTriageRecord(req, res) {
     const detectedLanguage = containsFrenchKeywords(symptoms) ? 'French' : 'English';
     console.log(`📥 Processing request for ${patient} (Detected Lang: ${detectedLanguage})`);
 
-    // --- 2. SEVERITY CHECK & SMS TRIGGER ---
+    // --- SEVERITY CHECK & SMS TRIGGER ---
     let calculatedUrgency = urgency || "normal";
     const criticalKeywords = ['chest pain', 'breathing', 'breath', 'stroke', 'heart', 'unconscious', 'douleur thoracique', 'respirer'];
     const symptomsLower = symptoms?.toLowerCase() || "";
@@ -46,7 +49,6 @@ async function createTriageRecord(req, res) {
       calculatedUrgency = "high";
       console.log(`⚠️ High urgency detected via safety check for ${patient}`);
       
-      // 3. ACTUAL TWILIO LOGIC
       try {
         await twilioClient.messages.create({
           body: `🚨 EMERGENCY ALERT: ${patient} (${medical_id}) reporting ${symptoms}. Vitals: HR ${heartRate}, Temp ${temperature}. Check portal immediately.`,
@@ -57,9 +59,9 @@ async function createTriageRecord(req, res) {
       } catch (smsError) {
         console.error("❌ TWILIO ERROR:", smsError.message);
       }
-    }
+    }  
 
-    // --- 3. PATIENT IDENTITY CHECK ---
+    // --- PATIENT IDENTITY CHECK ---
     const existingPatientRecord = await prisma.triageRecord.findFirst({
       where: { patient: patient.trim() },
       orderBy: { id: 'desc' }
@@ -69,7 +71,7 @@ async function createTriageRecord(req, res) {
       ? existingPatientRecord.medical_id 
       : medical_id;
 
-    // --- 4. SAVE TO DATABASE IMMEDIATELY ---
+    // --- SAVE TO DATABASE ---
     let newTriageRecord = await prisma.triageRecord.create({
       data: {
         medical_id: finalMedicalId,
@@ -91,14 +93,13 @@ async function createTriageRecord(req, res) {
     io.emit('new_patient', newTriageRecord);
     console.log(`✅ Visit Record #${newTriageRecord.id} created for ID: ${finalMedicalId}`);
 
-    // --- 5. AI ANALYSIS ---
+    // --- AI ANALYSIS ---
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       const genAI = new GoogleGenerativeAI(apiKey);
       
       const model = genAI.getGenerativeModel(
-        { model: "gemini-2.5-flash" }, 
-        { apiVersion: 'v1' } 
+        { model: "gemini-2.0-flash" }
       ); 
 
       const prompt = `
@@ -136,6 +137,9 @@ async function createTriageRecord(req, res) {
   }
 }
 
+/**
+ * Update patient status (Seen/Pending)
+ */
 async function updateTriageStatus(req, res) {
   try {
     const { id } = req.params;
@@ -154,6 +158,9 @@ async function updateTriageStatus(req, res) {
   }
 }
 
+/**
+ * Fetch all records for the Doctor Dashboard
+ */
 async function getAllTriageRecords(req, res) {
   try {
     const records = await prisma.triageRecord.findMany({
@@ -165,8 +172,47 @@ async function getAllTriageRecords(req, res) {
   }
 }
 
+/**
+ * Public Status Check for Patients (Queue Position)
+ */
+async function getPatientStatus(req, res) {
+  const { medical_id } = req.params;
+
+  try {
+    // 1. Find the patient's most recent record
+    const patientRecord = await prisma.triageRecord.findFirst({
+      where: { medical_id: medical_id },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!patientRecord) {
+      return res.status(404).json({ error: "No active record found for this ID." });
+    }
+
+    // 2. Calculate queue position (everyone 'Pending' created before this record)
+    const position = await prisma.triageRecord.count({
+      where: {
+        status: 'Pending',
+        createdAt: {
+          lt: patientRecord.createdAt 
+        }
+      }
+    });
+
+    res.json({
+      patientName: patientRecord.patient,
+      status: patientRecord.status,
+      position: patientRecord.status === 'Pending' ? position + 1 : 0,
+      urgency: patientRecord.urgency
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Server error fetching status." });
+  }
+}
+
 module.exports = { 
   createTriageRecord, 
   getAllTriageRecords,
-  updateTriageStatus
+  updateTriageStatus,
+  getPatientStatus 
 };

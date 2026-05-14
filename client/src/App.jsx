@@ -1,7 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import TriageForm from './components/TriageForm';
-import PatientHistory from './components/PatientHistory'; // Ensure it's in src/components/
-import Login from './pages/Login'; // Ensure it's in src/pages/
+import PatientHistory from './components/PatientHistory'; 
+import PatientQueue from './components/PatientQueue'; // 1. Import the new component
+import Login from './pages/Login'; 
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -20,6 +21,9 @@ function App() {
       <Routes>
         {/* Login is full screen, no DashboardLayout */}
         <Route path="/login" element={<Login />} />
+
+        {/* 2. Public Queue Portal (No DashboardLayout to keep it clean for patients) */}
+        <Route path="/queue" element={<PatientQueue />} />
 
         {/* Form is public so patients can use it */}
         <Route path="/" element={

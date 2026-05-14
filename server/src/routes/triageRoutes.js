@@ -23,6 +23,9 @@ router.post('/create', triageController.createTriageRecord);
 // Get the doctor's list
 router.get('/history', triageController.getAllTriageRecords);
 
+// Public route for patients to check their own status
+router.get('/public/status/:medical_id', triageController.getPatientStatus);
+
 // Update status (Seen/Pending)
 router.patch('/:id/status', triageController.updateTriageStatus);
 

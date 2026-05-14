@@ -26,10 +26,26 @@ async function createTriageRecord(req, res) {
     };
 
     const detectedLanguage = containsFrenchKeywords(symptoms) ? 'French' : 'English';
-
     console.log(`📥 Processing request for ${patient} (Detected Lang: ${detectedLanguage})`);
 
-    // --- 2. PATIENT IDENTITY CHECK ---
+    // --- 2. SEVERITY CHECK (NEW LOGIC) ---
+    // This ensures critical cases show up as "high" even if AI fails or user inputs "normal"
+    let calculatedUrgency = urgency || "normal";
+    
+    const criticalKeywords = ['chest pain', 'breathing', 'breath', 'stroke', 'heart', 'unconscious', 'douleur thoracique', 'respirer'];
+    const symptomsLower = symptoms?.toLowerCase() || "";
+    
+    // Check for keywords or abnormal vitals (HR > 100 or Temp > 39)
+    if (
+      criticalKeywords.some(key => symptomsLower.includes(key)) || 
+      parseInt(heartRate) > 100 || 
+      parseFloat(temperature) > 39
+    ) {
+      calculatedUrgency = "high";
+      console.log(`⚠️ High urgency detected via safety check for ${patient}`);
+    }
+
+    // --- 3. PATIENT IDENTITY CHECK ---
     const existingPatientRecord = await prisma.triageRecord.findFirst({
       where: { patient: patient.trim() },
       orderBy: { id: 'desc' }
@@ -39,14 +55,7 @@ async function createTriageRecord(req, res) {
       ? existingPatientRecord.medical_id 
       : medical_id;
 
-    if (existingPatientRecord) {
-      console.log(`🔎 Returning patient found. Re-using Medical ID: ${finalMedicalId}`);
-    } else {
-      console.log(`🆕 New patient detected. Assigning Medical ID: ${finalMedicalId}`);
-    }
-
-    // --- 3. SAVE TO DATABASE IMMEDIATELY ---
-    // This happens BEFORE the AI call, so data is safe even if AI fails.
+    // --- 4. SAVE TO DATABASE IMMEDIATELY ---
     let newTriageRecord = await prisma.triageRecord.create({
       data: {
         medical_id: finalMedicalId,
@@ -59,7 +68,7 @@ async function createTriageRecord(req, res) {
         symptoms: symptoms || "No symptoms provided",
         medications: medications || null,
         history: history || null,
-        urgency: urgency || "normal",
+        urgency: calculatedUrgency, // Using our calculated urgency
         status: "Pending",
         diagnosis: "AI Analysis in progress..." 
       },
@@ -67,16 +76,15 @@ async function createTriageRecord(req, res) {
 
     console.log(`✅ Visit Record #${newTriageRecord.id} created for ID: ${finalMedicalId}`);
 
-    // --- 4. TRY AI ANALYSIS ---
+    // --- 5. TRY AI ANALYSIS ---
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       const genAI = new GoogleGenerativeAI(apiKey);
-
       
-        const model = genAI.getGenerativeModel(
+      const model = genAI.getGenerativeModel(
         { model: "gemini-2.5-flash" }, 
-        { apiVersion: 'v1' } // THIS IS THE CRITICAL FIX
-    );
+        { apiVersion: 'v1' } 
+      ); 
 
       const prompt = `
         As a medical triage assistant, analyze this profile:
@@ -93,7 +101,6 @@ async function createTriageRecord(req, res) {
       const response = await result.response;
       const aiDiagnosis = response.text();
 
-      // --- 5. UPDATE THE RECORD WITH THE AI RESULT ---
       newTriageRecord = await prisma.triageRecord.update({
         where: { id: newTriageRecord.id },
         data: { diagnosis: aiDiagnosis }
@@ -105,17 +112,26 @@ async function createTriageRecord(req, res) {
       console.error("⚠️ AI FAILED, but data is safe in DB:", aiError.message);
     }
 
-    // Return the record to the frontend
     res.status(201).json(newTriageRecord);
 
   } catch (error) {
-    console.error("--- CRITICAL DATABASE ERROR ---");
-    console.error(error.message);
-    res.status(500).json({
-      error: 'Failed to save patient record',
-      details: error.message
-    });
+    console.error("--- CRITICAL DATABASE ERROR ---", error.message);
+    res.status(500).json({ error: 'Failed to save patient record' });
   }
 }
 
-module.exports = { createTriageRecord };
+async function getAllTriageRecords(req, res) {
+  try {
+    const records = await prisma.triageRecord.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    res.status(200).json(records);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch patient history" });
+  }
+}
+
+module.exports = { 
+    createTriageRecord, 
+    getAllTriageRecords 
+};

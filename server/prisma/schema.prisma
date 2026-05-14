@@ -9,19 +9,19 @@ generator client {
 
 model TriageRecord {
   id            Int      @id @default(autoincrement())
+  medical_id    String     // The 9-digit ID
   patient       String
   age           Int?     // Vital for risk assessment
   gender        String?  
-  
   // Vitals
   heartRate     Int?     // BPM
   bloodPressure String?  // e.g., "120/80"
   temperature   Float?   // Celsius
-
   symptoms      String   @db.Text
   medications   String?  @db.Text // Current meds can cause side effects
   history       String?  @db.Text // Pre-existing conditions (Diabetes, etc.)
-  
+  status        String   @default("Pending") // 'Pending', 'Reviewed', etc.
+  doctorNotes   String?  @db.Text
   diagnosis     String?  @db.Text
   urgency       String
   language      String   @default("English") 

@@ -1,4 +1,4 @@
-import { useState } from 'react' // Added this back in
+import { useState } from 'react'
 import DashboardLayout from "@/components/layout/DashboardLayout"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,6 +14,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useToast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { Badge } from "@/components/ui/badge"
+
+// --- NEW: Medical ID Generator Utility ---
+const generateMedicalID = (name) => {
+  if (!name || name.length < 2) return "XX0000000";
+  const prefix = name.substring(0, 2).toUpperCase();
+  const numbers = Math.floor(1000000 + Math.random() * 9000000);
+  return `${prefix}${numbers}`;
+};
 
 function App() {
   const { toast } = useToast()
@@ -50,11 +58,15 @@ function App() {
     setLoading(true)
     setResult(null)
 
+    // --- NEW: Generate the ID before sending ---
+    const medID = generateMedicalID(formData.patient);
+
     try {
       const response = await fetch('http://localhost:5000/api/triage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        // --- NEW: Spread formData and add medical_id ---
+        body: JSON.stringify({ ...formData, medical_id: medID }),
       })
 
       const data = await response.json()
@@ -62,7 +74,8 @@ function App() {
 
       toast({
         title: "Assessment Saved",
-        description: `Successfully stored record for ${formData.patient} in MySQL.`,
+        // --- NEW: Show the ID in the toast ---
+        description: `ID: ${medID} stored for ${formData.patient}.`,
       })
     } catch (error) {
       toast({
@@ -92,7 +105,6 @@ function App() {
           </CardHeader>
 
           <CardContent className="space-y-6">
-            {/* Row 1: Demographics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-semibold">Patient Name</label>
@@ -115,7 +127,6 @@ function App() {
               </div>
             </div>
 
-            {/* Row 2: Vitals */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-red-600">Heart Rate (BPM)</label>
@@ -131,7 +142,6 @@ function App() {
               </div>
             </div>
 
-            {/* Row 3: Notes */}
             <div className="space-y-4 pt-4 border-t">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
@@ -162,7 +172,6 @@ function App() {
           </CardContent>
         </Card>
 
-        {/* AI Result View */}
         {result && (
           <Card className="bg-blue-50 border-blue-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <CardHeader className="pb-2">
@@ -183,4 +192,4 @@ function App() {
   )
 }
 
-export default App
+export default App;

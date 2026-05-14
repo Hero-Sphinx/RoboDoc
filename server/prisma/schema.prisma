@@ -27,3 +27,17 @@ model TriageRecord {
   language      String   @default("English") 
   createdAt     DateTime @default(now()) 
 } 
+
+enum Role {
+  DOCTOR
+  ADMIN
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("DOCTOR") // Can be 'DOCTOR' or 'ADMIN'
+  createdAt DateTime @default(now())
+}

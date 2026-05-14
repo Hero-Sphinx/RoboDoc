@@ -21,6 +21,7 @@ model TriageRecord {
   medications   String?  @db.Text // Current meds can cause side effects
   history       String?  @db.Text // Pre-existing conditions (Diabetes, etc.)
   status        String   @default("Pending") // 'Pending', 'Reviewed', etc.
+  seenBy        String?  // 
   doctorNotes   String?  @db.Text
   diagnosis     String?  @db.Text
   urgency       String

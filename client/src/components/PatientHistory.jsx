@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { UserCheck, LogOut, UserPlus, FileText, Search, Activity } from "lucide-react";
 
 const socket = io('http://localhost:5000');
 
@@ -19,6 +20,10 @@ const PatientHistory = () => {
   const [regData, setRegData] = useState({ name: '', email: '', password: '' });
   const [regStatus, setRegStatus] = useState(null);
 
+  // Get current doctor details from storage
+  const currentDoctorName = localStorage.getItem('doctorName') || 'Physician';
+  const userRole = localStorage.getItem('userRole');
+
   const getAuthHeader = () => ({
     'Authorization': `Bearer ${localStorage.getItem('token')}`,
     'Content-Type': 'application/json'
@@ -30,6 +35,7 @@ const PatientHistory = () => {
   };
 
   useEffect(() => {
+    // 1. Initial Fetch
     fetch('http://localhost:5000/api/triage/history', {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     })
@@ -37,12 +43,29 @@ const PatientHistory = () => {
       .then(data => setRecords(data))
       .catch(err => console.error("Fetch error:", err));
 
-    socket.on('new_patient', (newPatient) => setRecords(prev => [newPatient, ...prev]));
+    // 2. Socket Listeners
+    socket.on('new_patient', (newPatient) => {
+      // --- AUDIO ALERT LOGIC ---
+      const notificationSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      
+      notificationSound.play().catch(err => {
+        // Browsers block audio until the user clicks SOMETHING on the page.
+        // This catch prevents the console from exploding if that happens.
+        console.log("Audio playback waiting for user interaction.");
+      });
+
+      setRecords(prev => [newPatient, ...prev]);
+    });
+
     socket.on('patient_updated', (updated) => {
       setRecords(prev => prev.map(r => r.id === updated.id ? updated : r));
     });
 
-    return () => socket.off();
+    // 3. Cleanup
+    return () => {
+      socket.off('new_patient');
+      socket.off('patient_updated');
+    };
   }, []);
 
   const handleRegisterDoctor = async (e) => {
@@ -66,12 +89,17 @@ const PatientHistory = () => {
     }
   };
 
-  const handleStatusUpdate = async (id, status) => {
+  const handleStatusUpdate = async (id, currentStatus) => {
+    const newStatus = currentStatus === 'Seen' ? 'Pending' : 'Seen';
+    
     try {
       await fetch(`http://localhost:5000/api/triage/${id}/status`, {
         method: 'PATCH',
         headers: getAuthHeader(),
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ 
+            status: newStatus,
+            doctorName: currentDoctorName // <--- PASSING THE LOGGED IN DOCTOR
+        })
       });
     } catch (err) { console.error(err); }
   };
@@ -95,10 +123,12 @@ const PatientHistory = () => {
       doc.setFontSize(22);
       doc.setTextColor(30, 58, 138);
       doc.text("HHPP CLINICAL TRIAGE REPORT", 105, 20, { align: "center" });
+      
       doc.setFontSize(10);
       doc.setTextColor(100);
       doc.text(`Report ID: ${record.id || 'N/A'}-${record.medical_id || 'N/A'}`, 105, 27, { align: "center" });
       doc.line(20, 32, 190, 32);
+      
       doc.setFontSize(12);
       doc.setTextColor(0);
       doc.text("PATIENT PROFILE", 20, 42);
@@ -106,7 +136,7 @@ const PatientHistory = () => {
       doc.text(`Full Name: ${record.patient || 'Unknown'}`, 20, 50);
       doc.text(`Medical ID: ${record.medical_id || 'N/A'}`, 20, 56);
       doc.text(`Age/Gender: ${record.age || 'N/A'} Y/O | ${record.gender || 'N/A'}`, 120, 50);
-      doc.text(`Date: ${record.createdAt ? new Date(record.createdAt).toLocaleString() : 'N/A'}`, 120, 56);
+      doc.text(`Attending: Dr. ${record.seenBy || 'N/A'}`, 120, 56);
 
       autoTable(doc, {
         startY: 65,
@@ -118,7 +148,8 @@ const PatientHistory = () => {
           ['Body Temperature', `${record.temperature || '--'}°C`],
           ['Urgency Classification', (record.urgency || 'Normal').toUpperCase()],
           ['Clinical Notes', record.doctorNotes || 'No clinical notes provided'],
-          ['Current Status', record.status || 'Pending'],
+          ['Status', record.status || 'Pending'],
+          ['Finalized By', record.seenBy ? `Dr. ${record.seenBy}` : 'Unassigned']
         ],
         headStyles: { fillColor: [30, 58, 138] },
         theme: 'striped'
@@ -166,44 +197,43 @@ const PatientHistory = () => {
       {/* Header */}
       <div className="flex justify-between items-center bg-slate-900 text-white p-4 rounded-2xl shadow-lg">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🏥</span>
+          <Activity className="w-8 h-8 text-blue-400" />
           <div>
             <h1 className="font-bold text-lg leading-tight">HHPP Dashboard</h1>
             <p className="text-[10px] text-slate-400 uppercase tracking-wider">Clinical Management System</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {/* --- ADMIN ONLY BUTTON START --- */}
-          {localStorage.getItem('userRole') === 'ADMIN' && (
+        <div className="flex items-center gap-4">
+          {userRole === 'ADMIN' && (
             <Button 
               variant="outline" 
               size="sm" 
               className="hidden sm:flex border-slate-700 text-slate-300 hover:bg-slate-800" 
               onClick={() => setShowRegister(true)}
             >
-              + Add Colleague
+              <UserPlus className="w-4 h-4 mr-2" /> Add Colleague
             </Button>
           )}
-          {/* --- ADMIN ONLY BUTTON END --- */}
           
-          <div className="h-8 w-[1px] bg-slate-700 hidden sm:block"></div>
-          <span className="text-sm font-medium text-slate-300">Dr. {localStorage.getItem('doctorName') || 'Physician'}</span>
-          <Button variant="destructive" size="sm" className="bg-red-600 hover:bg-red-700" onClick={handleLogout}>Logout</Button>
+          <div className="flex flex-col items-end">
+            <span className="text-sm font-bold text-white">Dr. {currentDoctorName}</span>
+            <span className="text-[9px] text-blue-400 font-bold uppercase">{userRole}</span>
+          </div>
+          <Button variant="destructive" size="sm" onClick={handleLogout}>
+            <LogOut className="w-4 h-4" />
+          </Button>
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-        <div className="w-full max-w-md">
-          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1 block">Search Records</label>
-          <Input placeholder="Search by Patient Name or Medical ID..." className="h-11" onChange={(e) => setSearchTerm(e.target.value)} />
+        <div className="w-full max-w-md relative">
+          <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+          <Input placeholder="Search Patient or Medical ID..." className="pl-10 h-11" onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <label className="text-[10px] font-bold text-slate-400 uppercase mr-1 mb-1 block">Priority Filter</label>
-          <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
-            <Button variant={filterUrgency === 'all' ? 'default' : 'ghost'} size="sm" onClick={() => setFilterUrgency('all')}>All</Button>
-            <Button variant={filterUrgency === 'high' ? 'destructive' : 'ghost'} size="sm" onClick={() => setFilterUrgency('high')}>Emergencies</Button>
-          </div>
+        <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
+          <Button variant={filterUrgency === 'all' ? 'default' : 'ghost'} size="sm" onClick={() => setFilterUrgency('all')}>All Cases</Button>
+          <Button variant={filterUrgency === 'high' ? 'destructive' : 'ghost'} size="sm" onClick={() => setFilterUrgency('high')}>Emergencies</Button>
         </div>
       </div>
 
@@ -213,20 +243,37 @@ const PatientHistory = () => {
           <div className="text-center p-20 text-slate-400 italic">No clinical records found.</div>
         ) : (
           filteredRecords.map((record) => (
-            <Card key={record.id} className={`transition-all border-l-[12px] ${record.urgency === 'high' ? 'border-l-red-600 bg-red-50/20' : 'border-l-blue-600'}`}>
+            <Card key={record.id} className={`transition-all border-l-[12px] ${record.urgency === 'high' ? 'border-l-red-600 bg-red-50/10' : 'border-l-blue-600'}`}>
               <CardContent className="p-6">
                 <div className="flex flex-col md:flex-row justify-between gap-4">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <h3 className="font-bold text-2xl text-slate-900">{record.patient}</h3>
-                      <Badge variant="outline">{record.medical_id}</Badge>
-                      <Badge className={record.status === 'Seen' ? 'bg-emerald-500' : 'bg-slate-400'}>{record.status || 'Pending'}</Badge>
+                      <Badge variant="outline" className="font-mono">{record.medical_id}</Badge>
+                      <Badge className={record.status === 'Seen' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}>
+                        {record.status || 'Pending'}
+                      </Badge>
+                      
+                      {/* --- SEEN BY BADGE --- */}
+                      {record.seenBy && (
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200">
+                          <UserCheck className="w-3 h-3 mr-1" /> Seen by Dr. {record.seenBy}
+                        </Badge>
+                      )}
                     </div>
-                    <p className="text-sm text-slate-500">{record.age} Y/O | {record.gender} | Triage: {new Date(record.createdAt).toLocaleTimeString()}</p>
+                    <p className="text-sm text-slate-500">
+                      {record.age} Y/O | {record.gender} | Received: {new Date(record.createdAt).toLocaleTimeString()}
+                    </p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => downloadPDF(record)}>📄 PDF</Button>
-                    <Button onClick={() => handleStatusUpdate(record.id, record.status === 'Seen' ? 'Pending' : 'Seen')}>
+                  <div className="flex gap-2 shrink-0">
+                    <Button variant="outline" onClick={() => downloadPDF(record)}>
+                      <FileText className="w-4 h-4 mr-2" /> PDF
+                    </Button>
+                    <Button 
+                        variant={record.status === 'Seen' ? "secondary" : "default"}
+                        onClick={() => handleStatusUpdate(record.id, record.status)}
+                        className={record.status !== 'Seen' ? "bg-blue-600 hover:bg-blue-700" : ""}
+                    >
                       {record.status === 'Seen' ? 'Re-open' : 'Mark Seen'}
                     </Button>
                   </div>
@@ -234,30 +281,33 @@ const PatientHistory = () => {
 
                 <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6 border-t pt-6">
                   <div className="md:col-span-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Vitals</p>
-                    <div className="flex gap-2">
-                      <div className="border p-2 rounded text-center w-1/2 bg-white">
-                        <p className="text-xs">Heart</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Vitals Scan</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="border p-2 rounded bg-slate-50">
+                        <p className="text-[10px] text-slate-500">Heart Rate</p>
                         <p className="font-bold text-red-600">{record.heartRate} <span className="text-[9px]">BPM</span></p>
                       </div>
-                      <div className="border p-2 rounded text-center w-1/2 bg-white">
-                        <p className="text-xs">Temp</p>
+                      <div className="border p-2 rounded bg-slate-50">
+                        <p className="text-[10px] text-slate-500">Temp</p>
                         <p className="font-bold text-orange-600">{record.temperature}°C</p>
                       </div>
                     </div>
                   </div>
                   <div className="md:col-span-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">AI Assessment</p>
-                    <p className="text-sm italic bg-blue-50 p-3 rounded border border-blue-100 min-h-[60px]">{record.diagnosis}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">AI Clinical Assessment</p>
+                    <p className="text-sm italic bg-blue-50/50 p-3 rounded border border-blue-100 min-h-[60px] text-slate-700">
+                      {record.diagnosis}
+                    </p>
                   </div>
                   <div className="md:col-span-3 mt-4 border-t pt-4">
                     <div className="flex justify-between items-center mb-2">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">Doctor's Observations</p>
-                      <span className="text-[9px] text-slate-400 italic">Autosaves on blur</span>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Clinical Progress Notes</p>
+                      <span className="text-[9px] text-slate-400 italic font-medium uppercase tracking-tighter italic">Secured & Autosaving</span>
                     </div>
                     <textarea
-                      className="w-full p-3 text-sm border rounded-md bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-600 outline-none transition-all resize-none"
+                      className="w-full p-3 text-sm border rounded-md bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-600 outline-none transition-all resize-none shadow-inner"
                       rows="3"
+                      placeholder="Enter clinical observations, treatment plans, or follow-up instructions..."
                       defaultValue={record.doctorNotes || ""}
                       onBlur={(e) => handleNotesUpdate(record.id, e.target.value)}
                     />

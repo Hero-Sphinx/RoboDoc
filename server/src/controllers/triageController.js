@@ -23,7 +23,8 @@ async function createTriageRecord(req, res) {
       symptoms,
       medications,
       history,
-      urgency
+      urgency,
+      phone 
     } = req.body;
 
     const io = req.app.get('socketio');
@@ -36,7 +37,7 @@ async function createTriageRecord(req, res) {
     const detectedLanguage = containsFrenchKeywords(symptoms) ? 'French' : 'English';
     console.log(`📥 Processing request for ${patient} (Detected Lang: ${detectedLanguage})`);
 
-    // --- SEVERITY CHECK & SMS TRIGGER ---
+    // --- SEVERITY CHECK & DOCTOR SMS ALERT ---
     let calculatedUrgency = urgency || "normal";
     const criticalKeywords = ['chest pain', 'breathing', 'breath', 'stroke', 'heart', 'unconscious', 'douleur thoracique', 'respirer'];
     const symptomsLower = symptoms?.toLowerCase() || "";
@@ -56,8 +57,8 @@ async function createTriageRecord(req, res) {
           to: process.env.DOCTOR_PHONE
         });
         console.log(`📲 SMS Alert sent to doctor for ${patient}`);
-      } catch (smsError) {
-        console.error("❌ TWILIO ERROR:", smsError.message);
+      } catch (smsError) { 
+        console.error("❌ TWILIO DOCTOR ALERT ERROR:", smsError.message);
       }
     }  
 
@@ -90,17 +91,29 @@ async function createTriageRecord(req, res) {
       },
     });
 
+    // --- IMMEDIATE SOCKET EMIT ---
     io.emit('new_patient', newTriageRecord);
-    console.log(`✅ Visit Record #${newTriageRecord.id} created for ID: ${finalMedicalId}`);
+    console.log(`✅ Visit Record #${newTriageRecord.id} created and broadcasted.`);
+
+    // --- PATIENT WELCOME SMS ---
+    if (phone) {
+      try {
+        await twilioClient.messages.create({
+          body: `HHPP Clinic: Hello ${patient}, your triage ID is ${finalMedicalId}. You can track your status at the clinic portal.`,
+          from: process.env.TWILIO_PHONE,
+          to: phone
+        });
+        console.log(`📲 Welcome SMS sent to patient ${patient}`);
+      } catch (pSmsError) {
+        console.error("⚠️ PATIENT SMS FAILED (Verify number in Twilio Trial):", pSmsError.message);
+      }
+    }
 
     // --- AI ANALYSIS ---
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       const genAI = new GoogleGenerativeAI(apiKey);
-      
-      const model = genAI.getGenerativeModel(
-        { model: "gemini-2.0-flash" }
-      ); 
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); 
 
       const prompt = `
         As a medical triage assistant, analyze this profile:
@@ -114,8 +127,7 @@ async function createTriageRecord(req, res) {
       `;
 
       const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const aiDiagnosis = response.text();
+      const aiDiagnosis = result.response.text();
 
       newTriageRecord = await prisma.triageRecord.update({
         where: { id: newTriageRecord.id },
@@ -123,10 +135,10 @@ async function createTriageRecord(req, res) {
       });
 
       io.emit('patient_updated', newTriageRecord);
-      console.log(`🤖 AI Analysis updated for ${patient} in ${detectedLanguage}`);
+      console.log(`🤖 AI Analysis updated for ${patient}`);
 
     } catch (aiError) {
-      console.error("⚠️ AI FAILED, but data is safe in DB:", aiError.message);
+      console.error("⚠️ AI ERROR:", aiError.message);
     }
 
     res.status(201).json(newTriageRecord);
@@ -143,13 +155,16 @@ async function createTriageRecord(req, res) {
 async function updateTriageStatus(req, res) {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, doctorName } = req.body; 
     const io = req.app.get('socketio');
 
     const updatedRecord = await prisma.triageRecord.update({
       where: { id: parseInt(id) },
-      data: { status }
-    });
+      data: {
+        status,
+        seenBy: status === 'Seen' ? doctorName : null
+      }
+    }); 
 
     io.emit('patient_updated', updatedRecord);
     res.status(200).json(updatedRecord);
@@ -159,7 +174,7 @@ async function updateTriageStatus(req, res) {
 }
 
 /**
- * Fetch all records for the Doctor Dashboard
+ * Fetch all records for Doctor Dashboard
  */
 async function getAllTriageRecords(req, res) {
   try {
@@ -173,13 +188,14 @@ async function getAllTriageRecords(req, res) {
 }
 
 /**
- * Public Status Check for Patients (Queue Position)
+ * Public Status Check for Patients (Queue Position & PDF Data)
  */
 async function getPatientStatus(req, res) {
-  const { medical_id } = req.params;
+  const { medical_id } = req.params; 
+  const AVG_WAIT_PER_PATIENT = 15; 
 
   try {
-    // 1. Find the patient's most recent record
+    // Find the most recent record for this ID
     const patientRecord = await prisma.triageRecord.findFirst({
       where: { medical_id: medical_id },
       orderBy: { createdAt: 'desc' }
@@ -189,13 +205,11 @@ async function getPatientStatus(req, res) {
       return res.status(404).json({ error: "No active record found for this ID." });
     }
 
-    // 2. Calculate queue position (everyone 'Pending' created before this record)
+    // Calculate queue position
     const position = await prisma.triageRecord.count({
       where: {
         status: 'Pending',
-        createdAt: {
-          lt: patientRecord.createdAt 
-        }
+        createdAt: { lt: patientRecord.createdAt }
       }
     });
 
@@ -203,9 +217,13 @@ async function getPatientStatus(req, res) {
       patientName: patientRecord.patient,
       status: patientRecord.status,
       position: patientRecord.status === 'Pending' ? position + 1 : 0,
-      urgency: patientRecord.urgency
+      urgency: patientRecord.urgency,
+      estimatedWait: patientRecord.status === 'Pending' ? (position * AVG_WAIT_PER_PATIENT) : 0,
+      // Provide the full record so the PDF generator has data
+      recordData: patientRecord 
     });
   } catch (error) {
+    console.error("Error in getPatientStatus:", error);
     res.status(500).json({ error: "Server error fetching status." });
   }
 }

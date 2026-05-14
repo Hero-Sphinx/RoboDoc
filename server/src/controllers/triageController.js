@@ -1,7 +1,11 @@
 const { PrismaClient } = require('@prisma/client');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const twilio = require('twilio'); // 1. Added Twilio Import
 
 const prisma = new PrismaClient();
+
+// 2. Initialize Twilio Client
+const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 
 async function createTriageRecord(req, res) {
   try {
@@ -19,7 +23,8 @@ async function createTriageRecord(req, res) {
       urgency
     } = req.body;
 
-    // --- 1. LANGUAGE DETECTION ---
+    const io = req.app.get('socketio');
+
     const containsFrenchKeywords = (text) => {
       const frenchKeywords = ['mal', 'douleur', 'ventre', 'tête', 'fièvre', 'aide', 'pas', 'histoire'];
       return frenchKeywords.some(word => text?.toLowerCase().includes(word));
@@ -28,14 +33,11 @@ async function createTriageRecord(req, res) {
     const detectedLanguage = containsFrenchKeywords(symptoms) ? 'French' : 'English';
     console.log(`📥 Processing request for ${patient} (Detected Lang: ${detectedLanguage})`);
 
-    // --- 2. SEVERITY CHECK (NEW LOGIC) ---
-    // This ensures critical cases show up as "high" even if AI fails or user inputs "normal"
+    // --- 2. SEVERITY CHECK & SMS TRIGGER ---
     let calculatedUrgency = urgency || "normal";
-    
     const criticalKeywords = ['chest pain', 'breathing', 'breath', 'stroke', 'heart', 'unconscious', 'douleur thoracique', 'respirer'];
     const symptomsLower = symptoms?.toLowerCase() || "";
     
-    // Check for keywords or abnormal vitals (HR > 100 or Temp > 39)
     if (
       criticalKeywords.some(key => symptomsLower.includes(key)) || 
       parseInt(heartRate) > 100 || 
@@ -43,6 +45,18 @@ async function createTriageRecord(req, res) {
     ) {
       calculatedUrgency = "high";
       console.log(`⚠️ High urgency detected via safety check for ${patient}`);
+      
+      // 3. ACTUAL TWILIO LOGIC
+      try {
+        await twilioClient.messages.create({
+          body: `🚨 EMERGENCY ALERT: ${patient} (${medical_id}) reporting ${symptoms}. Vitals: HR ${heartRate}, Temp ${temperature}. Check portal immediately.`,
+          from: process.env.TWILIO_PHONE,
+          to: process.env.DOCTOR_PHONE
+        });
+        console.log(`📲 SMS Alert sent to doctor for ${patient}`);
+      } catch (smsError) {
+        console.error("❌ TWILIO ERROR:", smsError.message);
+      }
     }
 
     // --- 3. PATIENT IDENTITY CHECK ---
@@ -68,15 +82,16 @@ async function createTriageRecord(req, res) {
         symptoms: symptoms || "No symptoms provided",
         medications: medications || null,
         history: history || null,
-        urgency: calculatedUrgency, // Using our calculated urgency
+        urgency: calculatedUrgency,
         status: "Pending",
         diagnosis: "AI Analysis in progress..." 
       },
     });
 
+    io.emit('new_patient', newTriageRecord);
     console.log(`✅ Visit Record #${newTriageRecord.id} created for ID: ${finalMedicalId}`);
 
-    // --- 5. TRY AI ANALYSIS ---
+    // --- 5. AI ANALYSIS ---
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       const genAI = new GoogleGenerativeAI(apiKey);
@@ -106,6 +121,7 @@ async function createTriageRecord(req, res) {
         data: { diagnosis: aiDiagnosis }
       });
 
+      io.emit('patient_updated', newTriageRecord);
       console.log(`🤖 AI Analysis updated for ${patient} in ${detectedLanguage}`);
 
     } catch (aiError) {
@@ -117,6 +133,24 @@ async function createTriageRecord(req, res) {
   } catch (error) {
     console.error("--- CRITICAL DATABASE ERROR ---", error.message);
     res.status(500).json({ error: 'Failed to save patient record' });
+  }
+}
+
+async function updateTriageStatus(req, res) {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const io = req.app.get('socketio');
+
+    const updatedRecord = await prisma.triageRecord.update({
+      where: { id: parseInt(id) },
+      data: { status }
+    });
+
+    io.emit('patient_updated', updatedRecord);
+    res.status(200).json(updatedRecord);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update status" });
   }
 }
 
@@ -132,6 +166,7 @@ async function getAllTriageRecords(req, res) {
 }
 
 module.exports = { 
-    createTriageRecord, 
-    getAllTriageRecords 
+  createTriageRecord, 
+  getAllTriageRecords,
+  updateTriageStatus
 };

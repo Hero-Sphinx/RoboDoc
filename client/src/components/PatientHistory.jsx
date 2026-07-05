@@ -39,21 +39,23 @@ const PatientHistory = () => {
     fetch('http://localhost:5000/api/triage/history', {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     })
-      .then(res => res.json())
-      .then(data => setRecords(data))
+      .then(res => {
+        if (res.status === 401 || res.status === 403) {
+          localStorage.clear();
+          window.location.href = '/login';
+          return null;
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data) setRecords(Array.isArray(data) ? data : []);
+      })
       .catch(err => console.error("Fetch error:", err));
 
     // 2. Socket Listeners
+    // Audio alert is handled globally by <DoctorNotifications /> so it fires
+    // even when the doctor isn't on this page - this listener just updates the list.
     socket.on('new_patient', (newPatient) => {
-      // --- AUDIO ALERT LOGIC ---
-      const notificationSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-      
-      notificationSound.play().catch(err => {
-        // Browsers block audio until the user clicks SOMETHING on the page.
-        // This catch prevents the console from exploding if that happens.
-        console.log("Audio playback waiting for user interaction.");
-      });
-
       setRecords(prev => [newPatient, ...prev]);
     });
 

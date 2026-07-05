@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -12,6 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { useToast } from "@/components/ui/use-toast"
 import { Badge } from "@/components/ui/badge"
+import { ArrowLeft, Search } from "lucide-react"
 
 // Utility to generate unique IDs
 const generateMedicalID = (name) => {
@@ -39,6 +41,7 @@ function TriageForm() {
 
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
+  const [medicalId, setMedicalId] = useState(null)
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -55,6 +58,7 @@ function TriageForm() {
 
     setLoading(true)
     setResult(null)
+    setMedicalId(null)
 
     const medID = generateMedicalID(formData.patient);
 
@@ -68,6 +72,7 @@ function TriageForm() {
 
       const data = await response.json()
       setResult(data.diagnosis || "AI failed to generate a response.")
+      setMedicalId(data.medical_id || medID)
 
       toast({
         title: "Assessment Saved",
@@ -85,7 +90,13 @@ function TriageForm() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-8 space-y-8 pb-20">
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-4xl mx-auto px-8 pt-6">
+        <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800">
+          <ArrowLeft className="w-4 h-4" /> Back to Home
+        </Link>
+      </div>
+      <div className="max-w-4xl mx-auto p-8 space-y-8 pb-20">
       <Card className="border-t-4 border-primary shadow-lg bg-white">
         <CardHeader>
           <div className="flex justify-between items-center">
@@ -163,6 +174,24 @@ function TriageForm() {
         </CardContent>
       </Card>
 
+      {/* Medical ID Display - the patient needs this to check their queue position later */}
+      {medicalId && (
+        <Card className="bg-emerald-50 border-emerald-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <CardContent className="p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-emerald-700">Your Medical ID — save this</p>
+              <p className="text-3xl font-mono font-bold text-emerald-900">{medicalId}</p>
+              <p className="text-sm text-emerald-700 mt-1">Use this ID to check your queue position and download your report.</p>
+            </div>
+            <Button asChild className="bg-emerald-600 hover:bg-emerald-700 shrink-0">
+              <Link to={`/queue?id=${medicalId}`}>
+                <Search className="mr-2 h-4 w-4" /> Check My Queue Position
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Result Display */}
       {result && (
         <Card className="bg-blue-50 border-blue-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -176,6 +205,7 @@ function TriageForm() {
           </CardContent>
         </Card>
       )}
+      </div>
     </div>
   )
 }

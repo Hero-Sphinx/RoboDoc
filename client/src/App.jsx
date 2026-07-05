@@ -1,9 +1,11 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import TriageForm from './components/TriageForm';
-import PatientHistory from './components/PatientHistory'; 
+import PatientHistory from './components/PatientHistory';
 import PatientQueue from './components/PatientQueue'; // 1. Import the new component
-import Login from './pages/Login'; 
+import Login from './pages/Login';
+import Landing from './pages/Landing';
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import DoctorNotifications from './components/DoctorNotifications';
 import { Toaster } from "@/components/ui/toaster";
 
 // The "Bouncer" for the History page
@@ -22,15 +24,14 @@ function App() {
         {/* Login is full screen, no DashboardLayout */}
         <Route path="/login" element={<Login />} />
 
+        {/* Landing/home: patients choose to log in (doctor), check queue, or start a new assessment */}
+        <Route path="/" element={<Landing />} />
+
         {/* 2. Public Queue Portal (No DashboardLayout to keep it clean for patients) */}
         <Route path="/queue" element={<PatientQueue />} />
 
-        {/* Form is public so patients can use it */}
-        <Route path="/" element={
-          <DashboardLayout>
-            <TriageForm />
-          </DashboardLayout>
-        } />
+        {/* Triage form is public so patients can use it - no doctor chrome */}
+        <Route path="/triage" element={<TriageForm />} />
 
         {/* History is protected and uses DashboardLayout */}
         <Route 
@@ -46,6 +47,7 @@ function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <DoctorNotifications />
       <Toaster />
     </Router>
   );

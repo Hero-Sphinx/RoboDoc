@@ -18,11 +18,11 @@ const DashboardLayout = ({ children }) => {
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
-          <Link 
-            to="/" 
+          <Link
+            to="/triage"
             className={`block p-3 rounded-lg font-medium transition-colors ${
-              isActive('/') 
-                ? 'bg-blue-600 text-white' 
+              isActive('/triage')
+                ? 'bg-blue-600 text-white'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
@@ -57,8 +57,8 @@ const DashboardLayout = ({ children }) => {
             "My purpose is to serve through technology."
           </div>
           <div className="flex items-center gap-4">
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">
-              AS
+            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">
+              HHPP 
             </div>
           </div>
         </header>

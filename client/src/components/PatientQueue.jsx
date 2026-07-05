@@ -1,30 +1,33 @@
 import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Search, Users, Clock, CheckCircle, FileText } from "lucide-react";
+import { Loader2, Search, Users, Clock, CheckCircle, FileText, ArrowLeft } from "lucide-react";
 
 const socket = io('http://localhost:5000');
 
 const PatientQueue = () => {
-  const [medicalId, setMedicalId] = useState("");
+  const [searchParams] = useSearchParams();
+  const [medicalId, setMedicalId] = useState(() => searchParams.get('id')?.toUpperCase() || "");
   const [statusData, setStatusData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const fetchStatus = async (e) => {
-    if (e) e.preventDefault();
-    if (!medicalId) return;
+  const fetchStatus = async (e, idOverride) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const idToUse = idOverride || medicalId;
+    if (!idToUse) return;
 
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`http://localhost:5000/api/triage/public/status/${medicalId}`);
+      const res = await fetch(`http://localhost:5000/api/triage/public/status/${idToUse}`);
       const data = await res.json();
-      
+
       if (res.ok) {
         setStatusData(data);
       } else {
@@ -37,6 +40,15 @@ const PatientQueue = () => {
       setLoading(false);
     }
   };
+
+  // If arriving from the triage form with ?id=..., auto-check status right away
+  useEffect(() => {
+    const idParam = searchParams.get('id');
+    if (idParam) {
+      fetchStatus(null, idParam.toUpperCase());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const downloadReport = () => {
     if (!statusData || !statusData.recordData) return;
@@ -128,7 +140,11 @@ const PatientQueue = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
-        
+
+        <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800">
+          <ArrowLeft className="w-4 h-4" /> Back to Home
+        </Link>
+
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl shadow-xl mb-2">
             <Users className="text-white w-8 h-8" />

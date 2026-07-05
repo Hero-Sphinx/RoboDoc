@@ -130,12 +130,21 @@ const PatientQueue = () => {
   };
 
   useEffect(() => {
-    socket.on('patient_updated', (updatedRecord) => {
-      if (statusData && updatedRecord.medical_id === medicalId) {
-        fetchStatus();
-      }
-    });
-    return () => socket.off('patient_updated');
+    // Any patient's status changing can shift everyone else's queue position
+    // (e.g. someone ahead gets marked "Seen"), not just changes to this
+    // patient's own record - so refresh on any update, not just a matching id.
+    const refreshIfWatchingSomeone = () => {
+      // Only auto-refresh once the patient has actually looked themselves up -
+      // not on every keystroke while they're still typing an ID.
+      if (statusData && medicalId) fetchStatus(null, medicalId);
+    };
+
+    socket.on('patient_updated', refreshIfWatchingSomeone);
+    socket.on('new_patient', refreshIfWatchingSomeone);
+    return () => {
+      socket.off('patient_updated', refreshIfWatchingSomeone);
+      socket.off('new_patient', refreshIfWatchingSomeone);
+    };
   }, [statusData, medicalId]);
 
   return (

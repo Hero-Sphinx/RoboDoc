@@ -11,5 +11,9 @@ build/
 # Ignore Prisma generated client
 server/src/generated/prisma/
 
+# Ignore data backups/dumps (contain real patient PHI / password hashes)
+server/prisma/*-backup.json
+server/prisma/*.dump
+
 # Ignore system files
 .DS_Store

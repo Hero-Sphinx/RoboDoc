@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useToast } from "@/components/ui/use-toast"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Search } from "lucide-react"
+import { API_URL } from "@/lib/config"
 
 // Utility to generate unique IDs
 const generateMedicalID = (name) => {
@@ -64,7 +65,7 @@ function TriageForm() {
 
     try {
       // UPDATED URL TO MATCH NEW BACKEND ROUTE
-      const response = await fetch('http://localhost:5000/api/triage/create', {
+      const response = await fetch(`${API_URL}/api/triage/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, medical_id: medID }),

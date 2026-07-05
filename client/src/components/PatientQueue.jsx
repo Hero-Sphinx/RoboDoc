@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Search, Users, Clock, CheckCircle, FileText, ArrowLeft } from "lucide-react";
+import { API_URL } from "@/lib/config";
 
-const socket = io('http://localhost:5000');
+const socket = io(API_URL);
 
 const PatientQueue = () => {
   const [searchParams] = useSearchParams();
@@ -25,7 +26,7 @@ const PatientQueue = () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`http://localhost:5000/api/triage/public/status/${idToUse}`);
+      const res = await fetch(`${API_URL}/api/triage/public/status/${idToUse}`);
       const data = await res.json();
 
       if (res.ok) {

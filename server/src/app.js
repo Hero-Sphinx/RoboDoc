@@ -10,12 +10,17 @@ const { login } = require('./controllers/authController'); // Added Auth Control
 const prisma = new PrismaClient();
 const app = express();
 const server = http.createServer(app); // Create HTTP server
-const PORT = 5000;
+// Render (and most hosts) assign the port dynamically via process.env.PORT -
+// binding to a hardcoded port would fail health checks in production.
+const PORT = process.env.PORT || 5000;
+// The deployed frontend origin (e.g. https://your-app.vercel.app), falling
+// back to the local Vite dev server URL when unset.
+const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
 // Initialize Socket.io
-const io = new Server(server, { 
+const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173", // Confirmed Frontend URL
+    origin: CLIENT_URL,
     methods: ["GET", "POST", "PATCH"]
   }
 });
@@ -23,7 +28,7 @@ const io = new Server(server, {
 // Middleware
 // We pass the origin to the main cors middleware as well for regular API hits
 app.use(cors({
-  origin: "http://localhost:5173"
+  origin: CLIENT_URL
 }));
 app.use(express.json());
 
@@ -53,10 +58,10 @@ io.on('connection', (socket) => {
 async function startServer() {
   try {
     await prisma.$connect();
-    console.log("✅ MySQL Database Connected!");
+    console.log("✅ Database Connected!");
     // Start the 'server' instead of 'app'
     server.listen(PORT, () => {
-      console.log(`🚀 Server heart beating on http://localhost:${PORT}`);
+      console.log(`🚀 Server heart beating on port ${PORT} (allowed origin: ${CLIENT_URL})`);
     });
   } catch (error) {
     console.error("❌ Server start error:", error);

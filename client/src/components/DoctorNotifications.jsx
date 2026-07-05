@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { io } from 'socket.io-client';
+import { API_URL } from "@/lib/config";
 
 // Mounted once at the app root so a logged-in doctor hears the new-patient
 // alert no matter which page they're on, not just while viewing /history.
-const notificationSocket = io('http://localhost:5000');
+const notificationSocket = io(API_URL);
 
 const DoctorNotifications = () => {
   useEffect(() => {

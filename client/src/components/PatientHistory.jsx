@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { UserCheck, LogOut, UserPlus, FileText, Search, Activity } from "lucide-react";
+import { API_URL } from "@/lib/config";
 
-const socket = io('http://localhost:5000');
+const socket = io(API_URL);
 
 const PatientHistory = () => {
   const [records, setRecords] = useState([]);
@@ -36,7 +37,7 @@ const PatientHistory = () => {
 
   useEffect(() => {
     // 1. Initial Fetch
-    fetch('http://localhost:5000/api/triage/history', {
+    fetch(`${API_URL}/api/triage/history`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     })
       .then(res => {
@@ -74,7 +75,7 @@ const PatientHistory = () => {
     e.preventDefault();
     setRegStatus("Processing...");
     try {
-      const res = await fetch('http://localhost:5000/api/triage/register', {
+      const res = await fetch(`${API_URL}/api/triage/register`, {
         method: 'POST',
         headers: getAuthHeader(),
         body: JSON.stringify(regData)
@@ -95,7 +96,7 @@ const PatientHistory = () => {
     const newStatus = currentStatus === 'Seen' ? 'Pending' : 'Seen';
     
     try {
-      await fetch(`http://localhost:5000/api/triage/${id}/status`, {
+      await fetch(`${API_URL}/api/triage/${id}/status`, {
         method: 'PATCH',
         headers: getAuthHeader(),
         body: JSON.stringify({ 
@@ -109,7 +110,7 @@ const PatientHistory = () => {
   const handleNotesUpdate = async (id, notes) => {
     if (notes === undefined) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/triage/${id}/notes`, {
+      const response = await fetch(`${API_URL}/api/triage/${id}/notes`, {
         method: 'PATCH',
         headers: getAuthHeader(),
         body: JSON.stringify({ notes })

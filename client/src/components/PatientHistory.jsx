@@ -122,27 +122,57 @@ const PatientHistory = () => {
   const downloadPDF = (record) => {
     try {
       const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const BRAND = [30, 58, 138];
+      const CARD_BG = [246, 248, 252];
+      const BORDER = [222, 227, 240];
+
+      // Header bar
+      doc.setFillColor(...BRAND);
+      doc.rect(0, 0, pageWidth, 18, 'F');
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(22);
-      doc.setTextColor(30, 58, 138);
-      doc.text("HHPP CLINICAL TRIAGE REPORT", 105, 20, { align: "center" });
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.text(`Report ID: ${record.id || 'N/A'}-${record.medical_id || 'N/A'}`, 105, 27, { align: "center" });
-      doc.line(20, 32, 190, 32);
-      
-      doc.setFontSize(12);
-      doc.setTextColor(0);
-      doc.text("PATIENT PROFILE", 20, 42);
+      doc.setFontSize(14);
+      doc.setTextColor(255, 255, 255);
+      doc.text("HHPP", 15, 11);
       doc.setFont("helvetica", "normal");
-      doc.text(`Full Name: ${record.patient || 'Unknown'}`, 20, 50);
-      doc.text(`Medical ID: ${record.medical_id || 'N/A'}`, 20, 56);
-      doc.text(`Age/Gender: ${record.age || 'N/A'} Y/O | ${record.gender || 'N/A'}`, 120, 50);
-      doc.text(`Attending: Dr. ${record.seenBy || 'N/A'}`, 120, 56);
+      doc.setFontSize(8);
+      doc.text("Hero-Sphinx Health Partner Platform", pageWidth - 15, 11, { align: "right" });
+
+      // Title
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.setTextColor(...BRAND);
+      doc.text("CLINICAL TRIAGE REPORT", pageWidth / 2, 32, { align: "center" });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(`Report ID: ${record.id || 'N/A'}-${record.medical_id || 'N/A'}`, pageWidth / 2, 38, { align: "center" });
+      doc.setDrawColor(...BRAND);
+      doc.setLineWidth(0.6);
+      doc.line(20, 42, pageWidth - 20, 42);
+
+      // Patient profile card
+      doc.setFillColor(...CARD_BG);
+      doc.setDrawColor(...BORDER);
+      doc.setLineWidth(0.2);
+      doc.roundedRect(15, 48, pageWidth - 30, 24, 2, 2, 'FD');
+      doc.setFillColor(...BRAND);
+      doc.rect(15, 48, 1.5, 24, 'F');
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(0);
+      doc.text("PATIENT PROFILE", 22, 55);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(`Full Name: ${record.patient || 'Unknown'}`, 22, 62);
+      doc.text(`Medical ID: ${record.medical_id || 'N/A'}`, 22, 68);
+      doc.text(`Age/Gender: ${record.age || 'N/A'} Y/O | ${record.gender || 'N/A'}`, 115, 62);
+      doc.text(`Attending: Dr. ${record.seenBy || 'N/A'}`, 115, 68);
 
       autoTable(doc, {
-        startY: 65,
+        startY: 78,
         head: [['Clinical Metric', 'Measurement / Detail']],
         body: [
           ['Primary Symptoms', record.symptoms || 'None reported'],
@@ -154,23 +184,96 @@ const PatientHistory = () => {
           ['Status', record.status || 'Pending'],
           ['Finalized By', record.seenBy ? `Dr. ${record.seenBy}` : 'Unassigned']
         ],
-        headStyles: { fillColor: [30, 58, 138] },
-        theme: 'striped'
+        headStyles: { fillColor: BRAND, textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: CARD_BG },
+        styles: { fontSize: 9, cellPadding: 3, lineColor: BORDER },
+        theme: 'striped',
+        margin: { left: 20, right: 20 }
       });
 
       let finalY = doc.lastAutoTable.finalY + 15;
-      const splitDiagnosis = doc.splitTextToSize(record.diagnosis || "No AI assessment.", 170);
-      const pageHeight = doc.internal.pageSize.getHeight();
+      const AI_COLOR = [79, 70, 229];
+      const AI_BG = [238, 237, 252];
+      const splitDiagnosis = doc.splitTextToSize(record.diagnosis || "No AI assessment.", 156);
       const lineHeight = 5;
-      const blockHeight = 8 + splitDiagnosis.length * lineHeight;
-      if (finalY + blockHeight > pageHeight - 20) {
+      const blockHeight = 28 + splitDiagnosis.length * lineHeight;
+      if (finalY + blockHeight > pageHeight - 25) {
         doc.addPage();
-        finalY = 20;
+        finalY = 30;
       }
 
-      doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(0).text("AI CLINICAL ASSESSMENT", 20, finalY);
-      doc.setFont("helvetica", "italic").setFontSize(10).setTextColor(50);
-      doc.text(splitDiagnosis, 20, finalY + 8);
+      const urgencyRaw = (record.urgency || 'Normal').toLowerCase();
+      let urgencyColor = [107, 114, 128];
+      if (/critical|emergency|high/.test(urgencyRaw)) urgencyColor = [220, 38, 38];
+      else if (/moderate|medium/.test(urgencyRaw)) urgencyColor = [217, 119, 6];
+      else if (/low|normal|stable/.test(urgencyRaw)) urgencyColor = [22, 163, 74];
+      const urgencyLabel = (record.urgency || 'Normal').toUpperCase();
+
+      const boxTop = finalY - 8;
+
+      // Card background + accent
+      doc.setFillColor(...AI_BG);
+      doc.setDrawColor(...AI_COLOR);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(15, boxTop, pageWidth - 30, blockHeight, 2.5, 2.5, 'FD');
+      doc.setFillColor(...AI_COLOR);
+      doc.roundedRect(15, boxTop, 2, blockHeight, 1, 1, 'F');
+
+      // Badge icon
+      doc.setFillColor(...AI_COLOR);
+      doc.circle(21, finalY - 2.3, 3.4, 'F');
+      doc.setFont("helvetica", "bold").setFontSize(6.5).setTextColor(255, 255, 255);
+      doc.text("AI", 21, finalY - 1, { align: "center" });
+
+      // Heading
+      doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(...AI_COLOR);
+      doc.text("AI CLINICAL ASSESSMENT", 28, finalY);
+
+      // Urgency pill (top-right of card)
+      const pillW = 32, pillH = 7, pillX = pageWidth - 20 - pillW, pillY = finalY - 5.5;
+      doc.setFillColor(...urgencyColor);
+      doc.roundedRect(pillX, pillY, pillW, pillH, 1.5, 1.5, 'F');
+      doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(255, 255, 255);
+      doc.text(urgencyLabel, pillX + pillW / 2, pillY + pillH / 2 + 1.3, { align: "center" });
+
+      // Divider
+      doc.setDrawColor(...AI_COLOR);
+      doc.setLineWidth(0.15);
+      doc.line(22, finalY + 5, pageWidth - 22, finalY + 5);
+
+      // Diagnosis text
+      doc.setFont("helvetica", "italic").setFontSize(10).setTextColor(55);
+      doc.text(splitDiagnosis, 22, finalY + 12);
+
+      // Footer caption inside the card
+      doc.setFont("helvetica", "normal").setFontSize(7).setTextColor(130);
+      doc.text("Generated by RoboDoc AI Diagnostic Engine", pageWidth - 22, boxTop + blockHeight - 4, { align: "right" });
+
+      // Watermark + footer on every page
+      const totalPages = doc.internal.getNumberOfPages();
+      const generatedAt = new Date().toLocaleString();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+
+        doc.saveGraphicsState();
+        doc.setGState(new doc.GState({ opacity: 0.08 }));
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(58);
+        doc.setTextColor(...BRAND);
+        doc.text("HHPP TRIAGE", pageWidth / 2, pageHeight / 2, { align: "center", angle: 35 });
+        doc.restoreGraphicsState();
+
+        doc.setDrawColor(...BORDER);
+        doc.setLineWidth(0.2);
+        doc.line(20, pageHeight - 16, pageWidth - 20, pageHeight - 16);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(140);
+        doc.text(`Generated ${generatedAt}`, 20, pageHeight - 10);
+        doc.text("CONFIDENTIAL — For clinical use only", pageWidth / 2, pageHeight - 10, { align: "center" });
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth - 20, pageHeight - 10, { align: "right" });
+      }
+
       doc.save(`Triage_${record.patient.replace(/\s+/g, '_')}.pdf`);
     } catch (error) { alert("PDF Error"); }
   };

@@ -158,10 +158,18 @@ const PatientHistory = () => {
         theme: 'striped'
       });
 
-      const finalY = doc.lastAutoTable.finalY + 15;
-      doc.setFont("helvetica", "bold").text("AI CLINICAL ASSESSMENT", 20, finalY);
-      doc.setFont("helvetica", "italic").setFontSize(10).setTextColor(50);
+      let finalY = doc.lastAutoTable.finalY + 15;
       const splitDiagnosis = doc.splitTextToSize(record.diagnosis || "No AI assessment.", 170);
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const lineHeight = 5;
+      const blockHeight = 8 + splitDiagnosis.length * lineHeight;
+      if (finalY + blockHeight > pageHeight - 20) {
+        doc.addPage();
+        finalY = 20;
+      }
+
+      doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(0).text("AI CLINICAL ASSESSMENT", 20, finalY);
+      doc.setFont("helvetica", "italic").setFontSize(10).setTextColor(50);
       doc.text(splitDiagnosis, 20, finalY + 8);
       doc.save(`Triage_${record.patient.replace(/\s+/g, '_')}.pdf`);
     } catch (error) { alert("PDF Error"); }
